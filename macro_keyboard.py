@@ -1,6 +1,6 @@
 """
-MacroBoard Pro - Ultimate Edition (Scroll Fixed + Import/Export + i18n)
-ต้องการ: pip install keyboard pyautogui
+MacroBoard Pro - Ultimate Edition (Scroll Fixed + Import/Export + i18n + Image/Clicker)
+ต้องการ: pip install keyboard pyautogui opencv-python
 รันด้วย Admin / Run as Administrator
 """
 
@@ -121,6 +121,16 @@ def execute_macro(macro, check_active_func=None):
         elif t == "hotkey":
             for c in [x.strip() for x in action.split(",")]: keyboard.send(c); time.sleep(0.05)
         elif t == "cmd": os.startfile(action) if sys.platform=="win32" else os.system(action)
+        elif t == "image_search":
+            if os.path.exists(action):
+                try:
+                    try: loc = pyautogui.locateCenterOnScreen(action, confidence=0.8)
+                    except: loc = pyautogui.locateCenterOnScreen(action)
+                    if loc: pyautogui.click(loc)
+                except: pass
+        elif t == "auto_click":
+            btn = action if action in ('left', 'right', 'middle') else 'left'
+            pyautogui.click(button=btn)
 
     def run_sequence():
         if t != "sequence":
@@ -284,8 +294,20 @@ class MacroApp(tk.Tk):
                 curr = curr.master
         except: pass
 
+    def _switch_tab(self, tab):
+        if tab == "macro":
+            self.b_mac.config(fg=self.ACCENT)
+            self.b_bot.config(fg=self.SUB)
+            if hasattr(self, '_amk_frame'): self._amk_frame.pack_forget()
+            self._macro_frame.pack(fill="both", expand=True)
+        else:
+            self.b_mac.config(fg=self.SUB)
+            self.b_bot.config(fg=self.ACCENT)
+            self._macro_frame.pack_forget()
+            if hasattr(self, '_amk_frame'): self._amk_frame.pack(fill="both", expand=True)
+
     def _build_ui(self):
-        self.title("MacroBoard Pro"); self.geometry("860x560"); self.minsize(720, 450); self.configure(bg=self.BG); 
+        self.title("MacroBoard Pro"); self.geometry("900x600"); self.minsize(720, 450); self.configure(bg=self.BG); 
         # เอา iconbitmap ออกเผื่อเครื่องที่ไม่มีไฟล์ icon.ico จะได้ไม่บัค
         try: self.iconbitmap("icon.ico") 
         except: pass
@@ -294,7 +316,13 @@ class MacroApp(tk.Tk):
         
         # ── Top Bar ──
         tb = tk.Frame(self, bg=self.BG, pady=8); tb.pack(fill="x", padx=14)
-        tk.Label(tb, text="⌨  MacroBoard", font=("Segoe UI",14,"bold"), bg=self.BG, fg=self.TEXT).pack(side="left")
+        
+        tf = tk.Frame(tb, bg=self.BG); tf.pack(side="left")
+        self.b_mac = tk.Button(tf, text="⌨ Macros", font=("Segoe UI",13,"bold"), bg=self.BG, fg=self.ACCENT, relief="flat", cursor="hand2", command=lambda: self._switch_tab("macro"))
+        self.b_mac.pack(side="left", padx=5)
+        self.b_bot = tk.Button(tf, text="🤖 Actions", font=("Segoe UI",13,"bold"), bg=self.BG, fg=self.SUB, relief="flat", cursor="hand2", command=lambda: self._switch_tab("bot"))
+        self.b_bot.pack(side="left", padx=5)
+
         b = tk.Frame(tb, bg=self.BG); b.pack(side="right")
         ok = is_admin()
         tk.Label(b, text="🔒 Admin" if ok else "⚠ No Admin", font=self.FS, bg=self.BG, fg=self.GREEN if ok else self.YELLOW).pack(side="left", padx=6)
@@ -302,7 +330,18 @@ class MacroApp(tk.Tk):
         ok2 = HOTKEY_OK
         tk.Label(b, text="● ON" if ok2 else "● OFF", font=self.FS, bg=self.BG, fg=self.GREEN if ok2 else self.ACCENT).pack(side="left", padx=6)
 
-        split = tk.Frame(self, bg=self.BG); split.pack(fill="both", expand=True, padx=10, pady=(0,6))
+        self.main_container = tk.Frame(self, bg=self.BG); self.main_container.pack(fill="both", expand=True, padx=10, pady=(0,6))
+        
+        split = tk.Frame(self.main_container, bg=self.BG); split.pack(fill="both", expand=True)
+        self._macro_frame = split
+        
+        try:
+            import amk_engine
+            self._amk_frame = amk_engine.AMKFrame(self.main_container, self.BG, self.PANEL, self.CARD, self.TEXT, self.ACCENT, self.SUB)
+        except Exception as e:
+            self._amk_frame = tk.Frame(self.main_container, bg=self.BG)
+            tk.Label(self._amk_frame, text=f"AMK Engine Error: {e}", bg=self.BG, fg="red").pack()
+
         split.columnconfigure(1, weight=1); split.rowconfigure(0, weight=1)
 
         # ── Sidebar ──
@@ -480,7 +519,7 @@ class MacroApp(tk.Tk):
         self._vr["hotkey"].config(text=m.get("hotkey","—"), fg="#a0c4ff")
         
         t = m.get("type","text")
-        self._vr["type"].config(text={"text":self.T("📝 ข้อความ", "📝 Text"), "hotkey":self.T("⌨ ปุ่ม", "⌨ Hotkey"), "cmd":"🖥 CMD", "sequence":"⏱ Sequence"}.get(t, t))
+        self._vr["type"].config(text={"text":self.T("📝 ข้อความ", "📝 Text"), "hotkey":self.T("⌨ ปุ่ม", "⌨ Hotkey"), "cmd":"🖥 CMD", "image_search":self.T("🖼 ค้นหารูปภาพ", "🖼 Image Search"), "auto_click":self.T("🖱 ออโต้คลิก", "🖱 Auto Click"), "sequence":"⏱ Sequence"}.get(t, t))
         
         pm = m.get("play_mode", "once")
         pms = {"once": self.T("รอบเดียว", "Play Once"), "hold": self.T("วนลูปตอนกดค้าง", "Hold Loop"), "toggle": self.T("เปิด/ปิดสลับกัน", "Toggle Loop"), "n_times": self.T(f"วน {m.get('loop_count',1)} รอบ", f"Loop {m.get('loop_count',1)} Times")}
@@ -522,7 +561,7 @@ class MacroApp(tk.Tk):
 
         tro = lbl(self.T("ประเภท", "Type"))
         type_var = tk.StringVar(value=macro.get("type","sequence")); self._edit_vars["type"] = type_var
-        ttk.Combobox(f, textvariable=type_var, values=["text","hotkey","cmd","sequence"], font=self.FB, state="readonly", width=12).grid(row=tro, column=1, sticky="w", padx=(0,14), pady=(10,2))
+        ttk.Combobox(f, textvariable=type_var, values=["text","hotkey","cmd","image_search","auto_click","sequence"], font=self.FB, state="readonly", width=16).grid(row=tro, column=1, sticky="w", padx=(0,14), pady=(10,2))
         
         albl = tk.Label(f, text="Action", font=self.FS, bg=self.PANEL, fg=self.SUB, anchor="nw")
         aro = r[0]; r[0]+=1; albl.grid(row=aro, column=0, sticky="nw", padx=(14,8), pady=(10,2))
@@ -556,6 +595,23 @@ class MacroApp(tk.Tk):
             tk.Entry(rf, textvariable=var, font=self.FB, bg=self.CARD, fg=self.TEXT, insertbackground=self.TEXT, relief="flat", bd=6).grid(row=0, column=0, sticky="ew")
             tk.Button(rf, text="📂", font=self.FS, bg=self.CARD, fg=self.SUB, relief="flat", padx=8, pady=4, cursor="hand2", command=lambda: (p:=filedialog.askopenfilename()) and var.set(p)).grid(row=0, column=1, padx=(4,0))
             cur.append(rf); return lambda: var.get().strip()
+
+        def bld_img():
+            clr(); albl.config(text=self.T("ไฟล์รูปภาพ", "Image File"))
+            var = tk.StringVar(value=av[0])
+            rf = tk.Frame(ac, bg=self.PANEL); rf.grid(row=0, column=0, sticky="ew"); rf.columnconfigure(0, weight=1)
+            tk.Entry(rf, textvariable=var, font=self.FB, bg=self.CARD, fg=self.TEXT, insertbackground=self.TEXT, relief="flat", bd=6).grid(row=0, column=0, sticky="ew")
+            tk.Button(rf, text="📂", font=self.FS, bg=self.CARD, fg=self.SUB, relief="flat", padx=8, pady=4, cursor="hand2", command=lambda: (p:=filedialog.askopenfilename(filetypes=[("Images", "*.png;*.jpg;*.jpeg;*.bmp")])) and var.set(p)).grid(row=0, column=1, padx=(4,0))
+            cur.append(rf); return lambda: var.get().strip()
+
+        def bld_click():
+            clr(); albl.config(text=self.T("ปุ่มเมาส์", "Mouse Button"))
+            var = tk.StringVar(value=av[0] if av[0] in ("left", "right", "middle") else "left")
+            cf = tk.Frame(ac, bg=self.PANEL); cf.grid(row=0, column=0, sticky="ew")
+            tk.Radiobutton(cf, text=self.T("ซ้าย (Left)", "Left"), variable=var, value="left", font=self.FS, bg=self.PANEL, fg=self.TEXT, selectcolor=self.CARD).pack(side="left", padx=(0,8))
+            tk.Radiobutton(cf, text=self.T("ขวา (Right)", "Right"), variable=var, value="right", font=self.FS, bg=self.PANEL, fg=self.TEXT, selectcolor=self.CARD).pack(side="left", padx=(0,8))
+            tk.Radiobutton(cf, text=self.T("กลาง (Middle)", "Middle"), variable=var, value="middle", font=self.FS, bg=self.PANEL, fg=self.TEXT, selectcolor=self.CARD).pack(side="left")
+            cur.append(cf); return lambda: var.get()
 
         def bld_seq():
             clr(); albl.config(text=self.T("ลำดับ (Sequence)", "Sequence"))
@@ -637,6 +693,8 @@ class MacroApp(tk.Tk):
             if t=="text": ga[0]=bld_text()
             elif t=="hotkey": ga[0]=bld_hk()
             elif t=="cmd": ga[0]=bld_cmd()
+            elif t=="image_search": ga[0]=bld_img()
+            elif t=="auto_click": ga[0]=bld_click()
             else: ga[0]=bld_seq()
         type_var.trace_add("write", on_t); on_t()
 
